@@ -1,0 +1,110 @@
+<% require 'mysql2' %>
+<% client = Mysql2::Client.new(:host => "localhost", :username => "root", :password => "mysql", :database => "kakeibo_db", :socket => "/var/run/mysqld/mysqld.sock") %>
+<% results_users = client.query("SELECT * FROM users") %>
+<% results_expense_items = client.query("SELECT * FROM expense_items") %>
+<% results_tags = client.query("SELECT * FROM tags") %>
+<% results_events = client.query("SELECT * FROM events") %>
+<% results_events_tags = client.query("SELECT * FROM events_tags") %>
+<% results_prices = client.query("SELECT * FROM prices") %>
+
+<!doctype html>
+<html lang="ja">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+
+
+    <title>家計簿アプリ</title>
+  </head>
+  <body>
+    <nav class="navbar navbar-dark bg-dark justify-content-center">
+      <p class="navbar-brand">家計簿アプリ</p>
+    </nav>
+    <div class="container mt-3">
+
+      <form action="./crad.rb" method="post" id="insert_users_form" class="border">
+        <input type="hidden" name="crad_pattern" value="insert_users">
+        <div class="form-group">
+          <div>
+            <label for="insert_user_name" class="col-sm-4 col-md-2">追加ユーザー名:</label>
+            <input type="text" name="name" id="insert_user_name" required placeholder="例）平林　直樹">
+          </div>
+          <input type="submit" class ="btn btn-primary">
+        </div>
+      </form>
+
+      <form action="./crad.rb" method="post" id="insert_expense_items_form" class="border">
+        <input type="hidden" name="crad_pattern" value="insert_expense_items">
+        <div class="form-group">
+          <div>
+            <label for="insert_expense_item_name" class="col-sm-4 col-md-2">追加費目名:</label>
+            <input type="text" name="name" id="insert_expense_item_name" required placeholder="例）給料">
+          </div>
+          <div>
+            <label class="col-sm-4 col-md-2">入出金区分:</label>
+            <input type="radio" name="is_payment" value="1" checked="checked">入金
+            <input type="radio" name="is_payment" value="0">出金
+          </div>
+          <input type="submit" class ="btn btn-primary">
+        </div>
+      </form>
+      
+      <form action="./crad.rb" method="post" id="insert_tags_form" class="border">
+        <input type="hidden" name="crad_pattern" value="insert_tags">
+        <div class="form-group">
+          <div>
+            <label for="insert_tag_value" class="col-sm-4 col-md-2">タグ名:</label>
+            <input type="text" name="value" id="insert_tag_value" required placeholder="例）いいね！">
+          </div>
+          <input type="submit" class="btn btn-primary">
+        </div>
+      </form>
+
+       <form action="./crad.rb" method="post" id="insert_events_form" class="border">
+        <input type="hidden" name="crad_pattern" value="insert_events">
+        <div class="form-group">
+          <div>
+            <label for="insert_event_event_on" class="col-sm-4 col-md-2">日付:</label>
+            <input type="date" name="event_on" id="insert_event_event_on" required>
+          </div>
+          <div>
+            <label for="insert_event_user_id" class="col-sm-4 col-md-2">ユーザー名:</label>
+            <select name="user_id" id="insert_event_user_id">
+              <% results_users.each do |row| %>
+                <option value=<%=row["id"]%>><%=row["name"]%></option>
+              <% end %>
+            </select>
+          </div>
+          <div>
+            <label for="insert_price_expense_item_id" class="col-sm-4 col-md-2">費目名:</label>
+            <select name="expense_item_id" id="insert_price_expense_item_id">
+              <% results_expense_items.each do |row| %>
+                <% is_payment_text = row["is_payment"] == 1 ? "入金" : "出金" %>
+                <option value=<%=row["id"]%>><%="#{row["name"]} (#{is_payment_text})"%></option>
+              <% end %>
+            </select>
+          </div>
+          <div>
+            <label for="insert_event_text" class="col-sm-4 col-md-2">内容:</label>
+            <textarea name="text" id="insert_event_text" rows="2" cols="30" required style="vertical-align:top;" placeholder="例）毎月の給料"></textarea>
+          </div>
+          <div>
+            <label for="insert_price_price" class="col-sm-4 col-md-2 mt-1">金額:</label>
+            <input type="text" name="price" id="insert_price_price_id" required inputmode="numeric" placeholder="例) 5000">
+          </div>
+          <input type="submit" class="btn btn-primary">
+        </div>
+      </form>
+      
+
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+ </body>
+</html>
