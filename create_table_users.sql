@@ -5,7 +5,7 @@ CREATE TABLE users(
 );
 CREATE TABLE events(
     id INT AUTO_INCREMENT,
-    text VARCHAR(255) NOT NULL,
+    text VARCHAR(255) NOT NULL CHECK(text REGEXP '^[^ 　]+'),
     event_on DATE NOT NULL,
     user_id INT NOT NULL,
     PRIMARY KEY(id),
@@ -13,20 +13,21 @@ CREATE TABLE events(
 );
 CREATE TABLE expense_items(
     id INT AUTO_INCREMENT,
-    name VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL UNIQUE CHECK(name REGEXP '^[^ 　]+'),
     is_payment BOOLEAN NOT NULL,
     PRIMARY KEY(id)
 );
 CREATE TABLE prices(
     event_id INT NOT NULL,
     expense_item_id INT NOT NULL,
-    price DECIMAL UNSIGNED NOT NULL,
+    price INT UNSIGNED NOT NULL,
     FOREIGN KEY(event_id) REFERENCES events(id),
-    FOREIGN KEY(expense_item_id) REFERENCES expense_items(id)
+    FOREIGN KEY(expense_item_id) REFERENCES expense_items(id),
+	UNIQUE(event_id,expense_item_id)
 );
 CREATE TABLE tags(
     id INT AUTO_INCREMENT,
-    value VARCHAR(255) NOT NULL UNIQUE,
+    value VARCHAR(255) NOT NULL UNIQUE CHECK(value REGEXP '^[^ 　]+'),
     PRIMARY KEY(id)
 );
 CREATE TABLE events_tags(

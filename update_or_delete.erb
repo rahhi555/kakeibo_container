@@ -1,0 +1,129 @@
+<% require 'mysql2' %>
+<% client = Mysql2::Client.new(:host => "localhost", :username => "root", :password => "mysql", :database => "kakeibo_db", :socket => "/var/run/mysqld/mysqld.sock") %>
+
+<% user_id = servlet_request.query["user_id"].to_i %>
+<% event_id = servlet_request.query["event_id"].to_i %>
+<% expense_item_id = servlet_request.query["expense_item_id"].to_i %>
+
+<% tag_id = servlet_request.query["tag_id"] %>
+<% tag_id = tag_id.empty? ? nil : tag_id.to_i %>
+
+<% statement = client.prepare(
+  "SELECT
+    events.event_on AS 日付,
+    users.name AS ユーザー名,
+    events.text AS 内容,
+    prices.name AS 費目,
+    IF(prices.is_payment=1,'入金','出金') AS 入出金区分,
+    prices.price AS 金額,
+    tags.value AS タグ,
+    users.id AS user_id,
+    events.id AS event_id,
+    tags.id AS tag_id,
+    prices.expense_item_id AS expense_item_id
+  FROM
+    events
+  LEFT JOIN users ON users.id = events.user_id
+  LEFT JOIN (SELECT * FROM prices JOIN expense_items ON prices.expense_item_id = expense_items.id) AS prices ON events.id = prices.event_id
+  LEFT JOIN events_tags ON events.id = events_tags.event_id
+  LEFT JOIN tags ON events_tags.tag_id = tags.id
+  WHERE
+    users.id = ? AND
+    events.id = ? AND
+    tags.id <=> ? AND
+    prices.expense_item_id  = ?;")
+  %>
+<% results = statement.execute(user_id,event_id,tag_id,expense_item_id)%>
+<% results_users = client.query("SELECT * FROM users") %>
+<% results_expense_items = client.query("
+                                        SELECT
+                                        id,
+                                        name,
+                                        IF(is_payment=1,'入金','出金') AS 入出金区分
+                                        FROM expense_items") %>
+<% results_events = client.query("SELECT * FROM events") %>
+<% results_tags = client.query("SELECT * FROM tags")%>
+<!doctype html>
+<html lang="ja">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
+    <!-- font awesome CDN -->
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.1/css/all.css" integrity="sha384-vp86vTRFVJgpjF9jiIGPEEqYqlDwgyBgEF109VFjmqGmIY/Y4HV4d3Gp2irVfcrp" crossorigin="anonymous">
+
+    <title>家計簿アプリ-変更画面</title>
+  </head>
+  <body>
+    <nav class="navbar navbar-dark bg-dark justify-content-center">
+      <p class="navbar-brand">家計簿アプリ</p>
+    </nav>
+    <div class="container mt-3">
+      <form action="crad.rb" method="post" id="update_form">
+        <input type="hidden" name="crad_pattern" value="update">
+        <input type="hidden" name="event_id" value="<%= event_id %>">
+        <input type="hidden" name="before_tag_id" value="<%= servlet_request.query["tag_id"]  %>">
+        <input type="hidden" name="before_expense_item_id" value="<%= servlet_request.query["expense_item_id"]  %>">
+        <div class="form-group row">
+          <label for="update_event_on">日付:</label>
+          <input type="date" name="event_on" id="update_event_on" value="<%=results.first["日付"]%>" class="form-control">
+        </div>
+        <div class="form-group row">
+          <label for="update_user_name">ユーザー名:</label>
+          <select id="update_user_name" class="form-control" name="user_id">
+            <% results_users.each do |row| %>
+              <% if row["id"] == user_id %>
+                <option value=<%= row["id"] %> selected><%= row["name"] %> &#x2611;</option>
+              <% else %>
+                <option value=<%= row["id"] %>><%= row["name"] %></option>
+              <% end %>
+            <% end %>
+          </select>
+        </div>
+        <div class="form-group row">
+          <label for="update_event_text">内容:</label>
+          <input type="text" id="update_event_text" value="<%=results.first["内容"]%>" class="form-control" name="event_text">
+        </div>
+        <div class="form-group row">
+          <label for="update_expense_item_name">費目:</label>
+          <select id="update_expense_item_name" class="form-control" name="expense_item_id">
+            <% results_expense_items.each do |row| %>
+              <% if row["id"] == expense_item_id %>
+                <option value=<%= row["id"] %> selected><%= "#{row["name"]}(#{row["入出金区分"]})" %> &#x2611;</option>
+              <% else %>
+                <option value=<%= row["id"] %>><%= "#{row["name"]}(#{row["入出金区分"]})" %></option>
+              <% end %> 
+            <% end %>
+          </select>
+        </div>
+        <div class="form-group row">
+          <label for="update_price">金額:</label>
+          <input type="text" id="update_price" value="<%=results.first["金額"]%>" class="form-control" name="price">
+        </div>
+        <div class="form-group row">
+          <label for="update_tag">タグ:</label>
+          <select id="update_tag" class="form-control" name="tag_id">
+            <option value=""></option>
+            <% results_tags.each do |row| %>
+              <% if row["id"] == tag_id %>
+                <option value=<%= row["id"] %> selected><%= row["value"] %> &#x2611;</option>
+              <% else %>
+                <option value=<%= row["id"] %>><%= row["value"] %></option>
+              <% end %> 
+            <% end %>
+           </select>
+        </div>
+        <a href="/" class="btn btn-secondary" >戻る</a>
+        <input type="submit" value="変更" class="btn btn-primary" >
+      </form>
+    </div>
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/js/bootstrap.min.js" integrity="sha384-OgVRvuATP1z7JjHLkuOU7Xw704+h835Lr+6QL9UvYjZE3Ipu6Tp75j7Bh/kR0JKI" crossorigin="anonymous"></script>
+  </body>
+</html>

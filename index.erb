@@ -1,11 +1,33 @@
+<% require 'uri' %>
+<% uri = URI('./update_or_delete.erb') %>
 <% require 'mysql2' %>
 <% client = Mysql2::Client.new(:host => "localhost", :username => "root", :password => "mysql", :database => "kakeibo_db", :socket => "/var/run/mysqld/mysqld.sock") %>
 <% results_users = client.query("SELECT * FROM users") %>
-<% results_expense_items = client.query("SELECT * FROM expense_items") %>
+<% results_expense_items = client.query("SELECT id,name,IF(is_payment=1,'入金','出金') AS 入出金区分 FROM expense_items") %>
 <% results_tags = client.query("SELECT * FROM tags") %>
 <% results_events = client.query("SELECT * FROM events") %>
 <% results_events_tags = client.query("SELECT * FROM events_tags") %>
 <% results_prices = client.query("SELECT * FROM prices") %>
+<% full_join_results = client.query(
+  "SELECT
+    events.event_on AS 日付,
+    users.name AS ユーザー名,
+    events.text AS 内容,
+    prices.name AS 費目,
+    IF(prices.is_payment=1,'入金','出金') AS 入出金区分,
+    prices.price AS 金額,
+    tags.value AS タグ,
+    users.id AS user_id,
+    events.id AS event_id,
+    tags.id AS tag_id,
+    prices.expense_item_id AS expense_item_id
+  FROM
+    events
+  LEFT JOIN users ON users.id = events.user_id
+  LEFT JOIN (SELECT * FROM prices JOIN expense_items ON prices.expense_item_id = expense_items.id) AS prices ON events.id = prices.event_id
+  LEFT JOIN events_tags ON events.id = events_tags.event_id
+  LEFT JOIN tags ON events_tags.tag_id = tags.id;")
+%>
 
 <!doctype html>
 <html lang="ja">
@@ -17,7 +39,15 @@
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css" integrity="sha384-9aIt2nRpC12Uk9gS9baDl411NQApFmC26EwAOH8WgZl5MYYxFfc+NcPb1dKGj7Sk" crossorigin="anonymous">
 
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.15.1/css/all.css" integrity="sha384-vp86vTRFVJgpjF9jiIGPEEqYqlDwgyBgEF109VFjmqGmIY/Y4HV4d3Gp2irVfcrp" crossorigin="anonymous">
 
+    <style type"text/css">
+      table tbody td a {
+        display: block;
+        color: black;
+      }
+    </style>
     <title>家計簿アプリ</title>
   </head>
   <body>
@@ -25,82 +55,195 @@
       <p class="navbar-brand">家計簿アプリ</p>
     </nav>
     <div class="container mt-3">
-
-      <form action="./crad.rb" method="post" id="insert_users_form" class="border">
-        <input type="hidden" name="crad_pattern" value="insert_users">
-        <div class="form-group">
-          <div>
-            <label for="insert_user_name" class="col-sm-4 col-md-2">追加ユーザー名:</label>
-            <input type="text" name="name" id="insert_user_name" required placeholder="例）平林　直樹">
-          </div>
-          <input type="submit" class ="btn btn-primary">
-        </div>
-      </form>
-
-      <form action="./crad.rb" method="post" id="insert_expense_items_form" class="border">
-        <input type="hidden" name="crad_pattern" value="insert_expense_items">
-        <div class="form-group">
-          <div>
-            <label for="insert_expense_item_name" class="col-sm-4 col-md-2">追加費目名:</label>
-            <input type="text" name="name" id="insert_expense_item_name" required placeholder="例）給料">
-          </div>
-          <div>
-            <label class="col-sm-4 col-md-2">入出金区分:</label>
-            <input type="radio" name="is_payment" value="1" checked="checked">入金
-            <input type="radio" name="is_payment" value="0">出金
-          </div>
-          <input type="submit" class ="btn btn-primary">
-        </div>
-      </form>
       
-      <form action="./crad.rb" method="post" id="insert_tags_form" class="border">
-        <input type="hidden" name="crad_pattern" value="insert_tags">
-        <div class="form-group">
-          <div>
-            <label for="insert_tag_value" class="col-sm-4 col-md-2">タグ名:</label>
-            <input type="text" name="value" id="insert_tag_value" required placeholder="例）いいね！">
-          </div>
-          <input type="submit" class="btn btn-primary">
-        </div>
-      </form>
+      <ul class="nav nav-tabs">
+        <li class="nav-item">
+          <a href="#insert_events_div" class="nav-link active" data-toggle="tab">
+            家計簿入力
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#insert_users_div" class="nav-link" data-toggle="tab">
+            ユーザー追加
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#insert_expense_items_div" class="nav-link" data-toggle="tab">
+            費目追加
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#insert_tags_div" class="nav-link" data-toggle="tab">
+            タグ追加
+          </a>
+        </li>
+      </ul>
 
-       <form action="./crad.rb" method="post" id="insert_events_form" class="border">
-        <input type="hidden" name="crad_pattern" value="insert_events">
-        <div class="form-group">
-          <div>
-            <label for="insert_event_event_on" class="col-sm-4 col-md-2">日付:</label>
-            <input type="date" name="event_on" id="insert_event_event_on" required>
+      <div class="tab-content">
+        <div class="tab-pane active" id="insert_events_div">
+          <form action="./crad.rb" method="post"  class="border">
+            <input type="hidden" name="crad_pattern" value="insert_events">
+            <div class="form-group">
+              <div>
+                <label for="insert_event_event_on" class="col-sm-4 col-md-2">日付:</label>
+                <input type="date" name="event_on" id="insert_event_event_on" required>
+              </div>
+              <div>
+                <label for="insert_event_user_id" class="col-sm-4 col-md-2">ユーザー名:</label>
+                <select name="user_id" id="insert_event_user_id">
+                  <% results_users.each do |row| %>
+                    <option value=<%=row["id"]%>><%=row["name"]%></option>
+                  <% end %>
+                </select>
+              </div>
+              <div>
+                <label for="insert_price_expense_item_id" class="col-sm-4 col-md-2">費目名:</label>
+                <select name="expense_item_id" id="insert_price_expense_item_id">
+                  <% results_expense_items.each do |row| %>
+                    <% is_payment_text = row["is_payment"] == 1 ? "入金" : "出金" %>
+                    <option value=<%=row["id"]%>><%="#{row["name"]} (#{is_payment_text})"%></option>
+                  <% end %>
+                </select>
+              </div>
+              <div>
+                <label for="insert_event_text" class="col-sm-4 col-md-2">内容:</label>
+                <textarea name="text" id="insert_event_text" rows="2" cols="30" required style="vertical-align:top;" placeholder="例）毎月の給料"></textarea>
+              </div>
+              <div>
+                <label for="insert_price_price" class="col-sm-4 col-md-2 mt-1">金額:</label>
+                <input type="text" name="price" id="insert_price_price_id" required inputmode="numeric" placeholder="例) 5000">
+              </div>
+              <div>
+                <label for="insert_tag_value_id" class="col-sm-4 col-md-2">タグ:</label>
+                <select name="tag_id" id="insert_tag_value_id">
+                  <option value=""></option>
+                  <% results_tags.each do |row| %>
+                    <option value=<%=row["id"]%>><%=row["value"]%></option>
+                  <% end %>
+                </select>
+              </div>
+              <input type="submit" class="btn btn-primary">
+            </div>
+          </form>
+          <div class="overflow-auto" style="height:500px;">
+            <table class="table table-striped">
+              <thead class="thead-dark">
+                <tr>
+                  <% full_join_results.fields[0..6].each do |col_name| %>
+                    <th><%= col_name %></th>
+                  <% end %>
+                </tr>
+              </thead>
+              <tbody>
+                <% full_join_results.each do |row| %>
+                   <% uri.query = URI.encode_www_form({
+                        user_id: row["user_id"],
+                        event_id: row["event_id"],
+                        tag_id: row["tag_id"],
+                        expense_item_id: row["expense_item_id"],
+                    })%>
+                  <tr>
+                    <td><a href="<%=uri%>"><%= row["日付"]%><i class="fas fa-edit"></i></a></td>
+                     <td><%= row["ユーザー名"]%></td>
+                     <td><%= row["内容"]%></td>
+                     <td><%= row["費目"]%></td>
+                     <td><%= row["入出金区分"]%></td>
+                     <td><%= row["金額"]%></td>
+                     <td><%= row["タグ"]%></td>
+                   </tr>
+                 <% end %>
+              </tbody>
+            </table>
           </div>
-          <div>
-            <label for="insert_event_user_id" class="col-sm-4 col-md-2">ユーザー名:</label>
-            <select name="user_id" id="insert_event_user_id">
+        </div>
+        
+        <div class="tab-pane" id="insert_users_div">
+          <form action="./crad.rb" method="post"  class="border">
+            <input type="hidden" name="crad_pattern" value="insert_users">
+            <div class="form-group">
+              <div>
+                <label for="insert_user_name" class="col-sm-4 col-md-2">追加ユーザー名:</label>
+                <input type="text" name="name" id="insert_user_name" required placeholder="例）平林　直樹">
+              </div>
+              <input type="submit" class ="btn btn-primary">
+            </div>
+          </form>
+          <table class="table table-striped">
+            <thead class="thead-dark">
+              <tr>
+                <th>ユーザー一覧</th>
+              </tr>
+            </thead>
+            <tbody>
               <% results_users.each do |row| %>
-                <option value=<%=row["id"]%>><%=row["name"]%></option>
+                <tr><td><%=row["name"]%></td></tr>
               <% end %>
-            </select>
-          </div>
-          <div>
-            <label for="insert_price_expense_item_id" class="col-sm-4 col-md-2">費目名:</label>
-            <select name="expense_item_id" id="insert_price_expense_item_id">
-              <% results_expense_items.each do |row| %>
-                <% is_payment_text = row["is_payment"] == 1 ? "入金" : "出金" %>
-                <option value=<%=row["id"]%>><%="#{row["name"]} (#{is_payment_text})"%></option>
-              <% end %>
-            </select>
-          </div>
-          <div>
-            <label for="insert_event_text" class="col-sm-4 col-md-2">内容:</label>
-            <textarea name="text" id="insert_event_text" rows="2" cols="30" required style="vertical-align:top;" placeholder="例）毎月の給料"></textarea>
-          </div>
-          <div>
-            <label for="insert_price_price" class="col-sm-4 col-md-2 mt-1">金額:</label>
-            <input type="text" name="price" id="insert_price_price_id" required inputmode="numeric" placeholder="例) 5000">
-          </div>
-          <input type="submit" class="btn btn-primary">
+            </tbody>
+          </table>
         </div>
-      </form>
-      
 
+        <div class="tab-pane" id="insert_expense_items_div">
+          <form action="./crad.rb" method="post" class="border">
+            <input type="hidden" name="crad_pattern" value="insert_expense_items">
+            <div class="form-group">
+              <div>
+                <label for="insert_expense_item_name" class="col-sm-4 col-md-2">追加費目名:</label>
+                <input type="text" name="name" id="insert_expense_item_name" required placeholder="例）給料">
+              </div>
+              <div>
+                <label class="col-sm-4 col-md-2">入出金区分:</label>
+                <input type="radio" name="is_payment" value="1" checked="checked">入金
+                <input type="radio" name="is_payment" value="0">出金
+              </div>
+              <input type="submit" class ="btn btn-primary">
+            </div>
+          </form>
+          <table class="table table-striped">
+            <thead class="thead-dark">
+              <tr>
+                <th>費目一覧</th>
+                <th>入出金区分</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% results_expense_items.each do |row| %>
+                <tr>
+                  <td><%=row["name"]%></td>
+                  <td><%=row["入出金区分"]%></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tab-pane" id="insert_tags_div">
+          <form action="./crad.rb" method="post" class="border">
+            <input type="hidden" name="crad_pattern" value="insert_tags">
+            <div class="form-group">
+              <div>
+                <label for="insert_tag_value" class="col-sm-4 col-md-2">タグ名:</label>
+                <input type="text" name="value" id="insert_tag_value" required placeholder="例）いいね！">
+              </div>
+              <input type="submit" class="btn btn-primary">
+            </div>
+          </form>
+          <table class="table table-striped">
+            <thead class="thead-dark">
+              <tr>
+                <th>タグ一覧</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% results_tags.each do |row| %>
+                <tr>
+                  <td><%=row["value"]%></td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table> 
+        </div>
+
+     </div>
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
